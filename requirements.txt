@@ -1,0 +1,5 @@
+pandapower
+scipy
+matplotlib
+fastapi
+uvicorn[standard]
