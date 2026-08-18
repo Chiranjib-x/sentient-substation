@@ -22,6 +22,12 @@ logging.getLogger("pandapower").setLevel(logging.ERROR)  # numba-not-installed c
 FEEDERS = 3
 LINE_TYPE = "NA2XS2Y 1x240 RM/25 12/20 kV"
 
+# IEC 60909 minimum-current calculations correct line resistance to the conductor
+# temperature at the end of the short circuit. 250 C is the permissible limit for XLPE
+# and gives the lowest fault current, i.e. the most demanding sensitivity check.
+# Drop to the 90 C max operating temperature for a less conservative study.
+END_TEMP_C = 250
+
 
 def build():
     """The demo substation. One function, no config file — the topology IS the config."""
@@ -38,8 +44,8 @@ def build():
     for f in range(1, FEEDERS + 1):
         near = pp.create_bus(net, vn_kv=20, name=f"F{f} near")
         far = pp.create_bus(net, vn_kv=20, name=f"F{f} far")
-        pp.create_line(net, mv, near, length_km=2.5, std_type=LINE_TYPE, name=f"F{f} head")
-        pp.create_line(net, near, far, length_km=3.0, std_type=LINE_TYPE, name=f"F{f} lateral")
+        pp.create_line(net, mv, near, length_km=2.5, std_type=LINE_TYPE, name=f"F{f} head", endtemp_degree=END_TEMP_C)
+        pp.create_line(net, near, far, length_km=3.0, std_type=LINE_TYPE, name=f"F{f} lateral", endtemp_degree=END_TEMP_C)
         pp.create_load(net, near, p_mw=1.2, q_mvar=0.4, name=f"F{f} near load")
         pp.create_load(net, far, p_mw=0.8, q_mvar=0.3, name=f"F{f} far load")
 
