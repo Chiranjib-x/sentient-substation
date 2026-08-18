@@ -1,0 +1,660 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentient Substation — What We Built and Why</title>
+<style>
+  /* Light palette lives on bare :root so the un-stamped (system) state resolves. */
+  :root {
+    --ground:   #f6f7f9;
+    --surface:  #ffffff;
+    --sunken:   #eceef2;
+    --ink:      #14181f;
+    --ink-soft: #454f5e;
+    --ink-mute: #6b7686;
+    --rule:     #d9dde4;
+    --copper:   #a85a26;
+    --copper-2: #8a4a1f;
+    --safe:     #2c6e49;
+    --caution:  #96700a;
+    --hazard:   #b0261c;
+    --safe-bg:   #e6f1ea;
+    --caution-bg:#f7eed6;
+    --hazard-bg: #f7e3e1;
+    --shadow: 0 1px 2px rgba(20,24,31,.05), 0 8px 24px -12px rgba(20,24,31,.14);
+
+    --display: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --body: "Iowan Old Style", "Charter", Georgia, "Times New Roman", serif;
+    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:   #0e1116;
+      --surface:  #161b22;
+      --sunken:   #1c222b;
+      --ink:      #e6eaf0;
+      --ink-soft: #b3bcca;
+      --ink-mute: #8590a1;
+      --rule:     #2a313b;
+      --copper:   #d98a4e;
+      --copper-2: #eaa76f;
+      --safe:     #56b183;
+      --caution:  #d4a531;
+      --hazard:   #e2685c;
+      --safe-bg:   #16281f;
+      --caution-bg:#2c2415;
+      --hazard-bg: #2e1a18;
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:   #0e1116;
+    --surface:  #161b22;
+    --sunken:   #1c222b;
+    --ink:      #e6eaf0;
+    --ink-soft: #b3bcca;
+    --ink-mute: #8590a1;
+    --rule:     #2a313b;
+    --copper:   #d98a4e;
+    --copper-2: #eaa76f;
+    --safe:     #56b183;
+    --caution:  #d4a531;
+    --hazard:   #e2685c;
+    --safe-bg:   #16281f;
+    --caution-bg:#2c2415;
+    --hazard-bg: #2e1a18;
+    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 10px 28px -14px rgba(0,0,0,.7);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--ground); color: var(--ink);
+    font-family: var(--body); font-size: 17px; line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+  .shell { display: grid; grid-template-columns: 1fr; max-width: 1180px; margin: 0 auto; }
+  @media (min-width: 1040px) {
+    .shell { grid-template-columns: 232px 1fr; gap: 48px; }
+  }
+
+  nav {
+    display: none; font-family: var(--display); font-size: 13.5px;
+    padding: 48px 0 48px 24px;
+  }
+  @media (min-width: 1040px) {
+    nav { display: block; position: sticky; top: 0; align-self: start; max-height: 100vh; overflow-y: auto; }
+  }
+  nav p { font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+          color: var(--ink-mute); margin: 0 0 12px; font-weight: 600; }
+  nav a { display: block; padding: 5px 0; color: var(--ink-soft); text-decoration: none;
+          border-left: 2px solid transparent; padding-left: 12px; margin-left: -14px; }
+  nav a:hover { color: var(--copper); border-left-color: var(--copper); }
+  nav a:focus-visible { outline: 2px solid var(--copper); outline-offset: 2px; }
+
+  main { padding: 48px 24px 96px; min-width: 0; }
+  .measure { max-width: 66ch; }
+
+  h1 {
+    font-family: var(--display); font-weight: 700; letter-spacing: -.022em;
+    font-size: clamp(2rem, 4.4vw, 2.9rem); line-height: 1.1; margin: 0 0 16px;
+    text-wrap: balance;
+  }
+  h2 {
+    font-family: var(--display); font-weight: 700; letter-spacing: -.015em;
+    font-size: 1.5rem; line-height: 1.25; margin: 64px 0 4px; text-wrap: balance;
+    scroll-margin-top: 24px;
+  }
+  h3 {
+    font-family: var(--display); font-weight: 650; font-size: 1.09rem;
+    margin: 34px 0 6px; letter-spacing: -.006em; text-wrap: balance;
+  }
+  h2 + .sub {
+    font-family: var(--display); font-size: 13px; color: var(--ink-mute);
+    margin: 0 0 22px; letter-spacing: .01em;
+  }
+  p { margin: 0 0 18px; }
+  .lede { font-size: 1.16rem; color: var(--ink-soft); line-height: 1.55; }
+  strong { font-weight: 700; }
+  em.term { font-style: normal; font-weight: 700; color: var(--copper); }
+
+  .eyebrow {
+    font-family: var(--display); font-size: 11.5px; font-weight: 700;
+    letter-spacing: .13em; text-transform: uppercase; color: var(--copper);
+    margin: 0 0 14px;
+  }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 56px 0 0; }
+
+  code, .mono { font-family: var(--mono); font-size: .88em; }
+  code { background: var(--sunken); padding: 1px 5px; border-radius: 3px; }
+
+  .card {
+    background: var(--surface); border: 1px solid var(--rule); border-radius: 8px;
+    padding: 20px 22px; box-shadow: var(--shadow);
+  }
+  .grid { display: grid; gap: 16px; }
+  @media (min-width: 700px) { .grid.two { grid-template-columns: 1fr 1fr; } }
+
+  .filecard h3 { margin: 0 0 2px; display: flex; align-items: baseline; gap: 10px; }
+  .filecard h3 .fn { font-family: var(--mono); font-size: .82em; color: var(--copper); font-weight: 600; }
+  .filecard .who { font-family: var(--display); font-size: 12px; color: var(--ink-mute); margin: 0 0 12px; }
+  .filecard p:last-child { margin-bottom: 0; }
+
+  .callout {
+    border-left: 3px solid var(--copper); background: var(--surface);
+    padding: 16px 20px; border-radius: 0 6px 6px 0; margin: 26px 0;
+    box-shadow: var(--shadow);
+  }
+  .callout p:last-child { margin-bottom: 0; }
+  .callout .lbl {
+    font-family: var(--display); font-size: 11px; font-weight: 700; letter-spacing: .11em;
+    text-transform: uppercase; color: var(--copper); display: block; margin-bottom: 6px;
+  }
+
+  .scroller { overflow-x: auto; margin: 22px 0; border-radius: 8px; border: 1px solid var(--rule); background: var(--surface); }
+  table { width: 100%; border-collapse: collapse; font-family: var(--display); font-size: 14px; }
+  th, td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--rule); }
+  thead th { background: var(--sunken); font-weight: 650; font-size: 12px;
+             letter-spacing: .04em; text-transform: uppercase; color: var(--ink-mute); }
+  tbody tr:last-child td { border-bottom: 0; }
+  td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 13px; }
+
+  .pill {
+    display: inline-block; padding: 2px 9px; border-radius: 20px;
+    font-family: var(--display); font-size: 11.5px; font-weight: 650; white-space: nowrap;
+  }
+  .p-safe { background: var(--safe-bg); color: var(--safe); }
+  .p-caution { background: var(--caution-bg); color: var(--caution); }
+  .p-hazard { background: var(--hazard-bg); color: var(--hazard); }
+
+  figure { margin: 30px 0; }
+  figure svg { display: block; width: 100%; height: auto; }
+  figcaption {
+    font-family: var(--display); font-size: 12.5px; color: var(--ink-mute);
+    margin-top: 10px; line-height: 1.5;
+  }
+  .figframe {
+    background: var(--surface); border: 1px solid var(--rule);
+    border-radius: 8px; padding: 22px; box-shadow: var(--shadow); overflow-x: auto;
+  }
+
+  ol.steps { list-style: none; counter-reset: s; padding: 0; margin: 26px 0; display: grid; gap: 2px; }
+  ol.steps li {
+    counter-increment: s; display: grid; grid-template-columns: 34px 1fr; gap: 16px;
+    padding: 16px 0; border-top: 1px solid var(--rule); align-items: start;
+  }
+  ol.steps li:last-child { border-bottom: 1px solid var(--rule); }
+  ol.steps li::before {
+    content: counter(s); font-family: var(--mono); font-size: 12px; font-weight: 600;
+    color: var(--copper); background: var(--sunken); border-radius: 4px;
+    width: 26px; height: 24px; display: grid; place-items: center; margin-top: 2px;
+  }
+  ol.steps h4 { font-family: var(--display); font-size: 15px; margin: 0 0 3px; font-weight: 650; }
+  ol.steps p { margin: 0; font-size: 15.5px; color: var(--ink-soft); }
+
+  ul.plain { padding-left: 20px; margin: 0 0 18px; }
+  ul.plain li { margin-bottom: 9px; }
+
+  .kbd {
+    font-family: var(--display); font-size: 12.5px; font-weight: 650;
+    background: var(--sunken); border: 1px solid var(--rule); border-bottom-width: 2px;
+    padding: 2px 8px; border-radius: 5px; white-space: nowrap;
+  }
+  .footnote { font-size: 15px; color: var(--ink-mute); }
+</style>
+</head>
+<body>
+<div class="shell">
+<nav aria-label="Contents">
+  <p>Contents</p>
+  <a href="#why">Why this project exists</a>
+  <a href="#basics">Three things to understand</a>
+  <a href="#idea">The one idea</a>
+  <a href="#chain">The chain, end to end</a>
+  <a href="#files">What each file does</a>
+  <a href="#ui">Reading the dashboard</a>
+  <a href="#buttons">What each button does</a>
+  <a href="#demo">The demo, click by click</a>
+  <a href="#real">Real vs simulated</a>
+  <a href="#left">What is still missing</a>
+</nav>
+
+<main>
+<p class="eyebrow">Sentient Substation · Team ERROR 404</p>
+<h1>What we built, and why any of it matters</h1>
+<p class="lede measure">A plain-language guide to the whole project: the problem it solves, what
+every file does, and how to read the screen. No electrical background assumed.</p>
+
+<hr>
+
+<h2 id="why">Why this project exists</h2>
+<p class="sub">The problem you signed up to solve</p>
+
+<div class="measure">
+<p>Electricity reaches your building through a <em class="term">substation</em>: a fenced yard or room
+full of switchgear that takes high-voltage power from the grid and steps it down for local use.
+Every substation has protective devices whose only job is to notice a fault and disconnect it fast.</p>
+
+<p>Those devices need settings — how much current counts as a fault, how long to wait before
+acting. Today a human engineer calculates those settings by hand, in a spreadsheet, over days.
+They are then written into the relays and, in practice, <strong>left untouched for years</strong>.</p>
+
+<p>Two things go wrong because of that.</p>
+
+<p><strong>Wrong settings cause blackouts.</strong> If the settings are badly chosen, a small fault on
+one street trips the breaker for the whole neighbourhood. One fault becomes a large outage.</p>
+
+<p><strong>Nobody knows the real danger level.</strong> When a fault arcs inside switchgear, it releases
+a burst of heat that can kill a technician standing in front of it. How bad it would be is
+calculated once, printed on a sticker, and stuck on the panel door. That sticker is often
+five years old and no longer true.</p>
+</div>
+
+<div class="callout measure">
+  <span class="lbl">Your problem statement, decoded</span>
+  <p>"Substations rely on static, manual relay calculations and periodic safety audits" means
+  <em>the settings are stale and the safety label is stale</em>. Everything in this project attacks
+  those two staleness problems — and, it turns out, they are the same problem.</p>
+</div>
+
+<h2 id="basics">Three things to understand first</h2>
+<p class="sub">Everything else follows from these</p>
+
+<h3>1. A relay is a smart fuse</h3>
+<div class="measure">
+<p>Think of the fuse box in a house. If a lamp shorts out, you want <em>the lamp's</em> fuse to blow —
+not the main fuse for the whole house. If the main one goes first you lose every room instead of
+one lamp.</p>
+<p>A substation has the same arrangement, much bigger. A <em class="term">relay</em> watches the current
+flowing through one section. When the current spikes, the relay tells a <em class="term">circuit
+breaker</em> to open. Relays are nested: the one nearest the fault should act first, and the ones
+further upstream should wait and only step in if the near one fails.</p>
+<p>Getting that ordering right is called <em class="term">coordination</em>. It is the single most
+important thing a protection engineer does, and it is what half this project automates.</p>
+</div>
+
+<figure>
+<div class="figframe">
+<svg viewBox="0 0 640 210" role="img" aria-label="Diagram: nested relays should trip nearest-first">
+  <g font-family="var(--display)" font-size="12">
+    <line x1="40" y1="52" x2="600" y2="52" stroke="var(--copper)" stroke-width="3"/>
+    <text x="40" y="38" fill="var(--ink-mute)">Power comes in here</text>
+
+    <g stroke="var(--ink-mute)" stroke-width="2">
+      <line x1="150" y1="52" x2="150" y2="150"/>
+      <line x1="330" y1="52" x2="330" y2="150"/>
+      <line x1="510" y1="52" x2="510" y2="150"/>
+    </g>
+
+    <g>
+      <rect x="138" y="82" width="24" height="24" rx="4" fill="var(--surface)" stroke="var(--ink-mute)" stroke-width="2"/>
+      <rect x="318" y="82" width="24" height="24" rx="4" fill="var(--safe-bg)" stroke="var(--safe)" stroke-width="2.5"/>
+      <rect x="498" y="82" width="24" height="24" rx="4" fill="var(--surface)" stroke="var(--ink-mute)" stroke-width="2"/>
+    </g>
+
+    <text x="172" y="98" fill="var(--ink-soft)">waits</text>
+    <text x="352" y="92" fill="var(--safe)" font-weight="700">trips first</text>
+    <text x="352" y="108" fill="var(--ink-mute)">nearest the fault</text>
+    <text x="532" y="98" fill="var(--ink-soft)">unaffected</text>
+
+    <g>
+      <circle cx="330" cy="168" r="13" fill="var(--hazard-bg)" stroke="var(--hazard)" stroke-width="2"/>
+      <text x="330" y="173" text-anchor="middle" fill="var(--hazard)" font-weight="700" font-size="13">!</text>
+      <text x="352" y="173" fill="var(--hazard)" font-weight="650">fault here</text>
+    </g>
+  </g>
+</svg>
+</div>
+<figcaption>Correct coordination: only the breaker closest to the fault opens. Bad coordination
+opens the upstream one too, and three streets go dark instead of one.</figcaption>
+</figure>
+
+<h3>2. An arc flash is an electrical explosion</h3>
+<div class="measure">
+<p>When a fault arcs inside a metal cabinet, the air itself becomes a conductor and burns at
+thousands of degrees. A technician standing in front of that panel takes the heat directly.</p>
+<p>The damage is measured in <em class="term">calories per square centimetre</em> (cal/cm²) landing on
+the person. Roughly: below 1.2 you are fine in ordinary clothes; around 8 you need serious
+protective gear; above 40 the industry position is that <strong>nobody should be working on it
+live at all</strong>.</p>
+<p>Here is the part that matters: <strong>that number depends almost entirely on how long the arc
+burns.</strong> Twice the time, twice the energy. And what decides the time? The relay setting.</p>
+</div>
+
+<h3>3. A loose connection is a fault waiting to happen</h3>
+<div class="measure">
+<p>Bolted joints inside switchgear work loose over years. A loose joint has more electrical
+resistance, and resistance under load makes heat. So a connection that is slowly failing gets
+slowly hotter, long before it actually faults.</p>
+<p>Put a temperature sensor on it and you can see the failure coming. That is what Schneider's
+<strong>ArcBlok</strong> product does, and it is what the second half of this project simulates.</p>
+</div>
+
+<h2 id="idea">The one idea that makes this a single product</h2>
+<p class="sub">Memorise this — it is the whole pitch</p>
+
+<div class="callout measure">
+  <p style="font-size:1.1rem;line-height:1.5">Arc-flash energy is set by <strong>how long the arc
+  burns</strong>. How long it burns is set by <strong>the relay settings</strong>. So relay coordination
+  and worker safety are not two problems — they are one loop, and today nobody closes it.</p>
+</div>
+
+<div class="measure">
+<p>This is the answer when a judge asks "why is this one product instead of two projects glued
+together?" The thermal sensors tell you <strong>where</strong> a fault is about to be born. The
+coordination engine decides <strong>how fast</strong> it gets cleared once it is. Multiply those and
+you get a live danger level — replacing a sticker calculated five years ago.</p>
+</div>
+
+<h2 id="chain">The chain, end to end</h2>
+<p class="sub">Five steps, each one a file</p>
+
+<ol class="steps measure">
+  <li>
+    <div><h4>Describe the substation</h4>
+    <p>Build a model of the wiring, then calculate two things: how much current flows normally,
+    and how much would flow during a short circuit at each location.</p></div>
+  </li>
+  <li>
+    <div><h4>Choose the relay settings</h4>
+    <p>Pick three numbers for every relay so that the nearest one always acts first, and the
+    total time spent in a fault is as small as possible.</p></div>
+  </li>
+  <li>
+    <div><h4>Turn time into danger</h4>
+    <p>Take the resulting clearing times and compute how much energy would hit a person standing
+    there, then convert that to a protective-gear rating.</p></div>
+  </li>
+  <li>
+    <div><h4>Watch the connections</h4>
+    <p>Stream temperatures from sensors on the joints and flag any one that is heating up
+    relative to its neighbours.</p></div>
+  </li>
+  <li>
+    <div><h4>Show an operator</h4>
+    <p>Push all of it to a screen, live, with the arithmetic visible so an engineer can check
+    the machine's reasoning instead of trusting it.</p></div>
+  </li>
+</ol>
+
+<h2 id="files">What each file does</h2>
+<p class="sub">In plain terms</p>
+
+<div class="grid two">
+  <div class="card filecard">
+    <h3><span class="fn">grid.py</span></h3>
+    <p class="who">Owner: Bibek</p>
+    <p><strong>The fake substation.</strong> Builds a model with a high-voltage supply, a transformer
+    stepping 20,000 V down, three outgoing feeder lines, and a low-voltage board at the end of
+    the first one.</p>
+    <p>Then it answers: how much current flows normally (59 A per feeder), and how much during a
+    short circuit at each point (6,204 A at the main busbar, dropping to 4,592 A at the far end —
+    it drops with distance because cable resists the flow).</p>
+    <p class="footnote">That drop is the only clue a relay has about <em>where</em> the fault is.</p>
+  </div>
+
+  <div class="card filecard">
+    <h3><span class="fn">coord.py</span></h3>
+    <p class="who">Owner: Bibek</p>
+    <p><strong>Chooses the relay settings.</strong> Each relay has three knobs: how much current wakes
+    it up, how long it waits, and how sharply its waiting time shrinks as current climbs.</p>
+    <p>It picks all three for all seven relays, then checks the answer against every fault
+    location under both strong and weak supply conditions — settings that work at full strength
+    can quietly fail when the grid is running light.</p>
+    <p class="footnote">The third knob is where our advantage comes from. See below.</p>
+  </div>
+
+  <div class="card filecard">
+    <h3><span class="fn">arcflash.py</span></h3>
+    <p class="who">Owner: Bibek</p>
+    <p><strong>Turns clearing time into a danger rating.</strong> Takes the times from
+    <code>coord.py</code> and computes the energy hitting a worker, then maps it to a protective
+    gear category.</p>
+    <p>It also models a dedicated arc-flash detector — a device that senses the <em>light</em> of an
+    arc and trips in milliseconds. That fixes a problem the relay settings alone cannot.</p>
+  </div>
+
+  <div class="card filecard">
+    <h3><span class="fn">sensors.py</span></h3>
+    <p class="who">Owner: Vishal</p>
+    <p><strong>Fake thermal sensors, and the logic that reads them.</strong> Six sensors on connection
+    points, with one that can be made to slowly overheat on command.</p>
+    <p>The clever part: it does not use a fixed temperature limit. It compares each connection
+    against its two neighbours, because room temperature and load swing everything by tens of
+    degrees without anything being wrong.</p>
+  </div>
+
+  <div class="card filecard">
+    <h3><span class="fn">api.py</span></h3>
+    <p class="who">Owner: Vishal</p>
+    <p><strong>The glue.</strong> Runs a clock, holds the current state, and pushes updates to the
+    browser continuously. Every other file stays independent — they only meet here.</p>
+    <p>It also serves the dashboard itself, so starting one command gives you the whole system.</p>
+  </div>
+
+  <div class="card filecard">
+    <h3><span class="fn">static/index.html</span></h3>
+    <p class="who">Owner: fourth member</p>
+    <p><strong>The screen.</strong> One file: the diagram, the charts, the alerts, the buttons. No
+    build step and nothing to install, which means one less thing that can fail on stage.</p>
+  </div>
+</div>
+
+<h3>Why our settings beat a careful engineer's</h3>
+<div class="measure">
+<p>A relay's third knob is its <em class="term">curve shape</em> — how aggressively its reaction time
+drops as current rises. There are three standard shapes. A human doing this by hand picks one
+shape and uses it everywhere, because mixing them means redoing all the arithmetic by hand.</p>
+<p>Across seven relays there are over two thousand combinations. A computer checks them in fifteen
+seconds. That is the entire source of our advantage, and it is worth being honest about: it is
+not magic, it is a search a human has no time to do.</p>
+</div>
+
+<div class="scroller">
+<table>
+  <thead><tr>
+    <th>Settings</th><th class="n">Wrong trips</th><th class="n">Total clearing</th><th>Verdict</th>
+  </tr></thead>
+  <tbody>
+    <tr><td>Copy-paste (same values everywhere)</td><td class="n">18</td><td class="n">1.066 s</td>
+        <td><span class="pill p-hazard">Broken</span></td></tr>
+    <tr><td>Careful engineer, by hand</td><td class="n">0</td><td class="n">1.876 s</td>
+        <td><span class="pill p-caution">Safe but slow</span></td></tr>
+    <tr><td>Our optimiser</td><td class="n">0</td><td class="n">1.561 s</td>
+        <td><span class="pill p-safe">Safe and 17% faster</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p class="measure footnote">Note the trap in row one: copy-paste settings look <em>fastest</em>. They
+are only fast because they are wrong — the wrong breaker opens. We compare against the careful
+engineer, not against the broken option, because beating a broken solution proves nothing.</p>
+
+<h2 id="ui">Reading the dashboard</h2>
+<p class="sub">Panel by panel, left to right</p>
+
+<h3>Single-line diagram (the big picture)</h3>
+<div class="measure">
+<p>This is the substation drawn as electricians draw it. Power enters at the top, passes through
+a transformer (the two overlapping circles), reaches the blue horizontal <strong>MV busbar</strong>, and
+splits into three feeders going down. The first feeder ends at a second transformer feeding the
+<strong>LV switchboard</strong> at the bottom.</p>
+<p>The small squares are relays, each labelled with how fast it would act. Coloured dots are the
+temperature sensors — green is normal, amber is worth investigating, red needs immediate
+attention. When you inject a fault, relays that tripped turn red and the sections that lost
+power go grey.</p>
+</div>
+
+<h3>Time-current curves</h3>
+<div class="measure">
+<p>Seven curved lines, one per relay. Read it as: "at this much current (across), I react in this
+much time (down)". Curves sloping down to the right mean bigger fault, faster reaction.</p>
+<p>What matters is the <em>vertical gap</em> between curves. Gap means the lower relay acts first and
+the upper one waits — correct coordination. Curves that touch or cross mean trouble.</p>
+</div>
+
+<h3>Connection temperatures</h3>
+<div class="measure">
+<p>Six wiggly lines, one per sensor. Normally they move together, because they all respond to the
+same room temperature and the same load. <strong>One line separating from the pack is the whole
+point</strong> — that is a joint going bad, and it is visible long before it reaches any alarming
+absolute temperature.</p>
+</div>
+
+<h3>Arc-flash hazard (right side)</h3>
+<div class="measure">
+<p>Two cards, one per place a person might stand. Each shows the energy in cal/cm², the protective
+gear category, how long the fault would burn, and the <em class="term">arc-flash boundary</em> — how
+far back you would have to stand to be safe.</p>
+</div>
+
+<h3>Coordination, Alerts, Mode comparison</h3>
+<div class="measure">
+<p><strong>Coordination</strong> says whether the current settings are valid, and lists any pair of relays
+that would fight each other. <strong>Alerts</strong> is the live feed of overheating connections.
+<strong>Mode comparison</strong> fills in as you switch between settings modes, so the audience can see
+the three approaches side by side.</p>
+</div>
+
+<h2 id="buttons">What each button does</h2>
+<p class="sub">And what to watch when you press it</p>
+
+<div class="scroller">
+<table>
+  <thead><tr><th>Button</th><th>What happens</th><th>Watch for</th></tr></thead>
+  <tbody>
+    <tr><td><span class="kbd">Copy-paste</span></td>
+        <td>Loads lazy settings — same values on every relay</td>
+        <td>Coordination panel turns red: 18 violations</td></tr>
+    <tr><td><span class="kbd">Hand-graded</span></td>
+        <td>Loads what a careful engineer would produce</td>
+        <td>Violations drop to zero, but times get slower</td></tr>
+    <tr><td><span class="kbd">Optimise</span></td>
+        <td>Runs the search — takes about 15 seconds</td>
+        <td>Zero violations <em>and</em> faster; hazard cards drop</td></tr>
+    <tr><td><span class="kbd">Inject hotspot</span></td>
+        <td>Starts one joint slowly loosening</td>
+        <td>Red line separates in the temperature chart, then alerts escalate</td></tr>
+    <tr><td><span class="kbd">Inject fault</span></td>
+        <td>Short-circuits the selected point</td>
+        <td>Which relays trip, and how many buses go dark</td></tr>
+    <tr><td><span class="kbd">None / Detection / Elimination</span></td>
+        <td>Adds a dedicated arc-flash device</td>
+        <td>MV busbar drops from lethal to workable</td></tr>
+    <tr><td><span class="kbd">Reset</span></td>
+        <td>Clears everything back to the start</td>
+        <td>Use between rehearsals</td></tr>
+  </tbody>
+</table>
+</div>
+
+<h3>The arc-flash device, and why it is a strong move</h3>
+<div class="measure">
+<p>The MV busbar sits at <strong>48 cal/cm²</strong> — well past the "do not work on this live" line — and
+optimising the settings only improved it by 8%. That is not a tuning failure; it is structural.
+The upstream relay <em>must</em> wait for the downstream ones to stay coordinated, and the waiting is
+what burns the technician.</p>
+<p>A light-sensing arc-flash relay escapes this entirely, because an arc inside a cabinet is never
+a downstream fault — so that device needs no coordination at all and can trip instantly.</p>
+</div>
+
+<div class="scroller">
+<table>
+  <thead><tr><th>Arc protection</th><th class="n">Clearing time</th><th class="n">Energy</th><th>Gear needed</th></tr></thead>
+  <tbody>
+    <tr><td>None (settings only)</td><td class="n">627 ms</td><td class="n">48.12</td>
+        <td><span class="pill p-hazard">Work prohibited</span></td></tr>
+    <tr><td>Light detection</td><td class="n">63 ms</td><td class="n">4.79</td>
+        <td><span class="pill p-caution">Category 2</span></td></tr>
+    <tr><td>Arc elimination</td><td class="n">4 ms</td><td class="n">0.31</td>
+        <td><span class="pill p-safe">None required</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<h2 id="demo">The demo, click by click</h2>
+<p class="sub">This sequence is your pitch — rehearse until it is automatic</p>
+
+<ol class="steps measure">
+  <li><div><h4>Press Copy-paste, then Inject fault</h4>
+    <p>Two relays trip instead of one. Three sections go dark when only one needed to.
+    Say: "this is what stale settings do."</p></div></li>
+  <li><div><h4>Press Hand-graded, then Inject fault again</h4>
+    <p>Only the correct breaker opens now. Say: "a careful engineer fixes this in about a day
+    of spreadsheet work."</p></div></li>
+  <li><div><h4>Press Optimise</h4>
+    <p>Fifteen seconds. Same safety, 17% faster, and the low-voltage board's danger rating
+    halves. Say: "fifteen seconds, and it also checks conditions the manual method skips."</p></div></li>
+  <li><div><h4>Press Inject hotspot and keep talking</h4>
+    <p>After about twenty seconds one temperature line separates and alerts climb from
+    <em>investigate</em> to <em>repair</em> to <em>immediate</em>. Say: "this joint is failing, and we
+    knew hours before any fixed-threshold alarm would have noticed."</p></div></li>
+  <li><div><h4>Press Detection</h4>
+    <p>The medium-voltage hazard collapses from prohibited to Category 2 with coordination
+    untouched. Say: "and where settings alone cannot help, we can say exactly what hardware
+    will."</p></div></li>
+</ol>
+
+<h2 id="real">What is real and what is simulated</h2>
+<p class="sub">Answer this honestly — the question is coming</p>
+
+<div class="grid two">
+  <div class="card">
+    <h3 style="margin-top:0">Genuinely real</h3>
+    <ul class="plain">
+      <li>The power-system maths — fault currents follow the international standard method</li>
+      <li>The relay equations, straight from the IEC standard</li>
+      <li>The arc-flash energy model, from the IEEE standard</li>
+      <li>The protective-gear categories, from the NFPA safety code</li>
+      <li>The temperature severity bands, from industry inspection criteria</li>
+      <li>The optimisation, and its measured improvement</li>
+    </ul>
+  </div>
+  <div class="card">
+    <h3 style="margin-top:0">Simulated</h3>
+    <ul class="plain">
+      <li>The substation itself is a realistic model, not a real site</li>
+      <li>Temperature readings come from a physics-based simulator, not hardware</li>
+      <li>No real relay is being reprogrammed — we compute settings, we do not push them</li>
+    </ul>
+    <p class="footnote" style="margin-bottom:0">This split is a strength, not a weakness. Say it
+    plainly and move on: real standards, real maths, simulated site.</p>
+  </div>
+</div>
+
+<div class="callout measure">
+  <span class="lbl">One correction to your submission</span>
+  <p>The form says <strong>IEEE 1584-2018</strong>. We use the 2002 edition of that standard plus a
+  second method for high voltage. The 2018 version needs large data tables that only come with
+  the purchased standard, and inventing numbers behind a <em>safety</em> claim is not acceptable.
+  Either buy the standard through your faculty mentor, or say "IEEE 1584" without the year.</p>
+</div>
+
+<h2 id="left">What is still missing</h2>
+<p class="sub">Two gaps, one urgent</p>
+
+<div class="measure">
+<p><strong>Nobody has checked our assumptions.</strong> Seven numbers underpin every result — the
+required waiting gap between relays, the current margin, the relay's minimum reaction time, the
+breaker opening time, and three temperature thresholds. A faculty member can validate all seven
+in ten minutes. Until then, every figure on the screen is provisional.</p>
+
+<p><strong>There is no business case yet.</strong> Financial impact is a quarter of your final score and
+currently has nothing behind it. It needs five sourced figures: the cost of an hour of unplanned
+outage, the cost of an arc-flash injury, the engineer-hours in one manual coordination study, the
+cost of a periodic safety audit, and how many substations a utility runs. Real sources with
+links — an invented number dies to the first follow-up question.</p>
+</div>
+
+<hr>
+<p class="footnote measure" style="margin-top:28px">Run it yourself:
+<code>.venv\Scripts\python -m uvicorn api:app</code> then open
+<code>http://127.0.0.1:8000</code>. Every file also self-checks — running
+<code>python coord.py</code> or <code>python arcflash.py</code> prints its own evidence and fails
+loudly if the logic breaks.</p>
+
+</main>
+</div>
+
+</body>
+</html>
