@@ -23,10 +23,10 @@ years ago and has been wrong ever since.
 |---|---|---|
 | `grid.py` | Bibek | pandapower network, IEC 60909 fault-current sweep, relay pairs |
 | `coord.py` | Bibek | IEC 60255-151 curves, CTI check, coordination optimizer |
-| `arcflash.py` | Bibek | IEEE 1584-2018 incident energy, NFPA 70E PPE mapping |
-| `sensors.py` | Vishal | Thermal telemetry simulator, EWMA anomaly detection |
-| `api.py` | Vishal | FastAPI, WebSocket push, SQLite log — the only integration point |
-| `test_core.py` | all | CTI holds after optimization; lower clearing time ⇒ lower incident energy |
+| `arcflash.py` | Bibek | IEEE 1584-2002 / Lee incident energy, NFPA 70E PPE mapping |
+| `sensors.py` | Vishal | Thermal telemetry simulator, differential NETA detection |
+| `api.py` | Vishal | FastAPI, WebSocket push, live clock - the only integration point |
+| _checks_ | all | each module self-checks in `__main__`; the assertions are the evidence |
 | `ui/` | — | React dashboard (Sprint 3, Sep 8) |
 
 **Rule:** the owner of a file is the only one who edits it. Integration happens in `api.py` and
@@ -46,17 +46,38 @@ Verify the environment:
 .venv\Scripts\python grid.py
 ```
 
-Run the tests:
+Every module self-checks when run directly - no separate suite, the assertions live next
+to the code they defend:
 
-```bash
-.venv\Scripts\python test_core.py
 ```
+python grid.py       topology, load flow, fault currents
+python coord.py      copy-paste vs hand-graded vs optimised settings
+python arcflash.py   incident energy and PPE category at both hazard points
+python sensors.py    thermal detection, false-positive and lead-time checks
+```
+
+## Running the platform
+
+```
+python -m uvicorn api:app --reload
+```
+
+Then open `http://127.0.0.1:8000/docs`. `POST /api/inject/hotspot` starts a joint
+degrading, `POST /api/optimize` re-coordinates and reports what it bought in cal/cm2, and
+`/ws` streams telemetry and alerts.
+
 
 ## Standards
 
 IEC 60255-151 (relay inverse-time curves) · IEC 60909 (short-circuit currents) ·
-IEEE C37.112 (inverse-time characteristic equations) · IEEE 1584-2018 (arc-flash incident energy) ·
-NFPA 70E (PPE categories)
+IEEE C37.112 (inverse-time characteristic equations) · IEEE 1584-2002 empirical model and
+the Lee method (arc-flash incident energy) · NFPA 70E (PPE categories) ·
+NETA thermographic criteria (delta-T severity bands)
+
+IEEE 1584-**2018** is not implemented. Its model needs large coefficient tables that come
+with the purchased standard, and inventing them would put fabricated numbers behind a
+safety claim. The 2002 empirical model is used below 15 kV and the Lee bound above it,
+which is what IEEE 1584 itself directs you to outside its tested range.
 
 ## Plan
 
