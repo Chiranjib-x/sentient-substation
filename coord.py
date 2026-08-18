@@ -47,6 +47,14 @@ TOL = 1e-6          # CTI is a design minimum; don't fail a pair on float dust
 # improvement by claiming sub-millisecond operation, and a protection engineer will spot
 # that instantly. Set it from the actual relay's published minimum operating time.
 T_MIN_OP = 0.02
+# A relay decides, then the breaker physically opens, then the relay's disc coasts a
+# little further before resetting. A backup that times out inside that window has already
+# sent its own trip, so BOTH breakers open and the outage is larger than the fault. This
+# is what the coordination time interval exists to prevent, and modelling it is what makes
+# a miscoordinated setting visibly fail rather than merely score badly.
+BREAKER_S = 0.06      # typical MV vacuum breaker opening + arcing time
+OVERTRAVEL_S = 0.01   # backup relay overtravel before it resets
+
 PICKUP_MIN = 1.25   # pickup must clear load current with margin
 PICKUP_MAX = 2.0    # ...but stay sensitive enough to detect real faults
 SENSITIVITY = 0.8   # pickup <= 0.8 * smallest fault current the relay must detect

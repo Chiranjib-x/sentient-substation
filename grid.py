@@ -107,6 +107,69 @@ def branch_buses(net, relay):
     return int(net.trafo.at[idx, "hv_bus"]), int(net.trafo.at[idx, "lv_bus"])
 
 
+def _trafo_on_edge(net, a, b):
+    for idx, tr in net.trafo.iterrows():
+        if {int(tr.hv_bus), int(tr.lv_bus)} == {a, b}:
+            return idx
+    return None
+
+
+def currents_for_fault(net, bus, ikss_ka, graph=None):
+    """Current each relay measures for a fault at `bus`, in kA.
+
+    Radial single source: relays on the source->fault path carry the fault current and
+    every other relay carries none. Transformers on that path refer the current by their
+    turns ratio, so a relay upstream of a step-down measures far less than the fault level
+    at the fault itself - which is exactly why an MV relay is slow to notice an LV fault.
+
+    A relay on a transformer branch is taken to measure on the downstream winding, matching
+    load_currents(), so its reading is assigned before that transformer's ratio is applied.
+    """
+    graph = graph if graph is not None else top.create_nxgraph(net, respect_switches=False)
+    source = int(net.ext_grid.bus.iat[0])
+    path = nx.shortest_path(graph, source, bus)
+
+    relay_at = {}
+    for r in relays(net):
+        fb, tb = branch_buses(net, r)
+        relay_at[(fb, tb)] = relay_at[(tb, fb)] = r["name"]
+
+    out = {r["name"]: 0.0 for r in relays(net)}
+    ratio = 1.0
+    for edge in reversed(list(zip(path, path[1:]))):
+        name = relay_at.get(edge)
+        if name:
+            out[name] = ikss_ka * ratio
+        tr = _trafo_on_edge(net, *edge)
+        if tr is not None:
+            ratio *= float(net.trafo.at[tr, "vn_lv_kv"] / net.trafo.at[tr, "vn_hv_kv"])
+    return out
+
+
+def protecting_relay(net, bus, graph=None):
+    """The relay whose own zone contains this fault - the one that should clear it."""
+    graph = graph if graph is not None else top.create_nxgraph(net, respect_switches=False)
+    source = int(net.ext_grid.bus.iat[0])
+    path = nx.shortest_path(graph, source, bus)
+    relay_at = {}
+    for r in relays(net):
+        fb, tb = branch_buses(net, r)
+        relay_at[(fb, tb)] = relay_at[(tb, fb)] = r["name"]
+    for edge in reversed(list(zip(path, path[1:]))):
+        if edge in relay_at:
+            return relay_at[edge]
+    return None
+
+
+def downstream_buses(net, relay_name):
+    """Buses that lose supply when this relay's breaker opens."""
+    graph = top.create_nxgraph(net, respect_switches=False)
+    relay = next(r for r in relays(net) if r["name"] == relay_name)
+    graph.remove_edge(*branch_buses(net, relay))
+    reach = nx.node_connected_component(graph, int(net.ext_grid.bus.iat[0]))
+    return [net.bus.at[b, "name"] for b in net.bus.index if b not in reach]
+
+
 def fault_currents(net, case="max"):
     """Current seen by each relay for a three-phase fault at the end of each zone.
 
@@ -128,13 +191,8 @@ def fault_currents(net, case="max"):
 
     table = {}
     for bus in sorted({r["zone_end"] for r in relays(net)}):
-        path = nx.shortest_path(graph, source, bus)
-        energised = set(zip(path, path[1:])) | set(zip(path[1:], path))
-        ikss = float(ikss_all.at[bus])
-        table[net.bus.at[bus, "name"]] = {
-            r["name"]: (ikss if branch_buses(net, r) in energised else 0.0)
-            for r in relays(net)
-        }
+        table[net.bus.at[bus, "name"]] = currents_for_fault(
+            net, bus, float(ikss_all.at[bus]), graph)
     return table
 
 

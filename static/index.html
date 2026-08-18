@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentient Substation</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #30363d; --ink: #e6edf3;
+    --dim: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+    --hot: #f85149; --crit: #ff7b72;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel);
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: .3px; }
+  h1 small { color: var(--dim); font-weight: 400; margin-left: 8px; }
+  .clock { margin-left: auto; color: var(--dim); font-variant-numeric: tabular-nums; }
+  .wrap { display: grid; grid-template-columns: 1fr 340px; gap: 14px; padding: 14px; }
+  @media (max-width: 1100px) { .wrap { grid-template-columns: 1fr; } }
+  .panel {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 8px; padding: 14px;
+  }
+  .panel h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--dim); margin: 0 0 12px; font-weight: 600;
+  }
+  .row { display: grid; gap: 14px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 800px) { .two { grid-template-columns: 1fr; } }
+  button {
+    background: #21262d; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover:not(:disabled) { border-color: var(--accent); }
+  button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #05101f; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: default; }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  .controls .sep { width: 1px; height: 22px; background: var(--line); }
+  select {
+    background: #21262d; color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 13px;
+  }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 6px; border-bottom: 1px solid #21262d; }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; }
+  .num { font-variant-numeric: tabular-nums; }
+  .hz { border: 1px solid var(--line); border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+  .hz .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .hz .big { font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .hz .meta { color: var(--dim); font-size: 12px; }
+  .pill {
+    display: inline-block; padding: 2px 8px; border-radius: 99px;
+    font-size: 11px; font-weight: 600;
+  }
+  .cat0 { background: #12331d; color: var(--ok); }
+  .cat1 { background: #33290f; color: var(--warn); }
+  .cat2 { background: #3d2a10; color: #e3a008; }
+  .cat3 { background: #43201d; color: var(--hot); }
+  .cat4, .cat5 { background: var(--hot); color: #fff; }
+  .alerts { max-height: 210px; overflow-y: auto; }
+  .alert { border-left: 3px solid var(--warn); padding: 6px 10px; margin-bottom: 6px; background: #1c2128; border-radius: 0 4px 4px 0; }
+  .alert.l3 { border-left-color: var(--hot); }
+  .alert .h { display: flex; justify-content: space-between; gap: 8px; }
+  .alert .s { color: var(--dim); font-size: 12px; }
+  .empty { color: var(--dim); font-style: italic; }
+  .bad { color: var(--hot); } .good { color: var(--ok); } .dim { color: var(--dim); }
+  svg { display: block; width: 100%; height: auto; }
+  .lbl { fill: var(--dim); font-size: 10px; }
+  .lbl-b { fill: var(--ink); font-size: 11px; font-weight: 600; }
+  #banner { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; display: none; }
+  #banner.show { display: block; }
+  #banner.ok { background: #12331d; border: 1px solid var(--ok); }
+  #banner.bad { background: #43201d; border: 1px solid var(--hot); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Sentient Substation <small>Unified adaptive protection &amp; continuous safety</small></h1>
+  <span class="clock">substation clock <b id="clock">00:00</b> · load <b id="load">—</b> · ambient <b id="amb">—</b></span>
+</header>
+
+<div class="wrap">
+  <div class="row">
+
+    <div class="panel">
+      <h2>Controls</h2>
+      <div class="controls">
+        <span class="dim">Relay settings:</span>
+        <button id="m-copy" data-mode="copy-paste">Copy-paste</button>
+        <button id="m-hand" data-mode="hand-graded">Hand-graded</button>
+        <button id="m-opt" data-mode="optimised">Optimise</button>
+        <span class="sep"></span>
+        <button id="hotspot">Inject hotspot</button>
+        <span class="sep"></span>
+        <select id="faultbus"></select>
+        <button id="fault">Inject fault</button>
+        <span class="sep"></span>
+        <button id="reset">Reset</button>
+      </div>
+      <div id="banner"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Single-line diagram</h2>
+      <svg id="sld" viewBox="0 0 760 400" role="img" aria-label="Substation single-line diagram"></svg>
+    </div>
+
+    <div class="two">
+      <div class="panel">
+        <h2>Time-current curves</h2>
+        <svg id="tcc" viewBox="0 0 420 300"></svg>
+      </div>
+      <div class="panel">
+        <h2>Connection temperatures</h2>
+        <svg id="therm" viewBox="0 0 420 300"></svg>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Why these settings</h2>
+      <table id="relays"><thead><tr>
+        <th>Relay</th><th>Pickup</th><th>TMS</th><th>Curve</th>
+        <th>Zone fault</th><th>Operates in</th>
+      </tr></thead><tbody></tbody></table>
+    </div>
+
+  </div>
+
+  <div class="row">
+    <div class="panel">
+      <h2>Arc-flash hazard</h2>
+      <div id="hazards"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Coordination</h2>
+      <div id="coord"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Alerts</h2>
+      <div class="alerts" id="alerts"><p class="empty">No alerts.</p></div>
+    </div>
+
+    <div class="panel">
+      <h2>Mode comparison</h2>
+      <div id="compare"><p class="empty">Switch modes to compare.</p></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = (p, m = "POST") => fetch(p, { method: m }).then(r => r.json());
+const fx = (v, n = 2) => (v === null || v === undefined) ? "—" : Number(v).toFixed(n);
+
+let S = null;            // latest /api/state snapshot
+let TCC = null;          // latest /api/tcc
+let lastFault = null;    // latest fault injection result
+const history = {};      // sensor -> array of temps
+const seenAlerts = [];   // newest first
+const modeStats = {};    // mode -> headline numbers, for the comparison table
+const HISTORY = 240;
+
+/* ---------- static topology for the single-line diagram ---------- */
+const FEEDX = { "F1": 170, "F2": 380, "F3": 590 };
+const Y = { mv: 110, near: 200, far: 280, lv: 350 };
+
+function sldGeometry() {
+  const nodes = [], edges = [];
+  nodes.push({ id: "HV infeed", x: 380, y: 40, kind: "src" });
+  edges.push({ relay: "Incomer", x1: 380, y1: 46, x2: 380, y2: Y.mv, trafo: [380, 78] });
+  for (const [f, x] of Object.entries(FEEDX)) {
+    edges.push({ relay: f + " head", x1: x, y1: Y.mv, x2: x, y2: Y.near });
+    edges.push({ relay: f + " lateral", x1: x, y1: Y.near, x2: x, y2: Y.far });
+    nodes.push({ id: f + " near", x, y: Y.near, kind: "bus" });
+    nodes.push({ id: f + " far", x, y: Y.far, kind: "bus" });
+  }
+  edges.push({ relay: null, x1: FEEDX.F1, y1: Y.far, x2: FEEDX.F1, y2: Y.lv,
+               trafo: [FEEDX.F1, Y.far + 35], label: "TD1" });
+  return { nodes, edges };
+}
+
+function catClass(c) { return "cat" + Math.min(c ?? 0, 5); }
+
+function drawSLD() {
+  const svg = $("#sld"); const g = sldGeometry();
+  const op = {}; (S?.relays || []).forEach(r => op[r.relay] = r.op_time_s);
+  const dead = new Set(lastFault?.de_energised || []);
+  const tripped = lastFault?.first;
+  const parts = [];
+
+  // busbars
+  parts.push(`<line x1="90" y1="${Y.mv}" x2="670" y2="${Y.mv}" stroke="#58a6ff" stroke-width="4"/>`);
+  parts.push(`<text class="lbl-b" x="90" y="${Y.mv - 10}">MV busbar 20 kV</text>`);
+  const lvDead = dead.has("LV switchboard");
+  parts.push(`<line x1="100" y1="${Y.lv}" x2="250" y2="${Y.lv}" stroke="${lvDead ? "#484f58" : "#58a6ff"}" stroke-width="4"/>`);
+  parts.push(`<text class="lbl-b" x="100" y="${Y.lv + 20}">LV switchboard 400 V</text>`);
+
+  for (const e of g.edges) {
+    const trippedSet = new Set([tripped, ...(lastFault?.spurious || [])]);
+    const off = dead.has(nodeBelow(e)) || (e.relay && trippedSet.has(e.relay));
+    const col = off ? "#484f58" : "#8b949e";
+    parts.push(`<line x1="${e.x1}" y1="${e.y1}" x2="${e.x2}" y2="${e.y2}" stroke="${col}" stroke-width="2"/>`);
+    if (e.trafo) {
+      const [tx, ty] = e.trafo;
+      parts.push(`<circle cx="${tx}" cy="${ty - 6}" r="9" fill="none" stroke="${col}" stroke-width="2"/>`);
+      parts.push(`<circle cx="${tx}" cy="${ty + 4}" r="9" fill="none" stroke="${col}" stroke-width="2"/>`);
+      if (e.label) parts.push(`<text class="lbl" x="${tx + 16}" y="${ty + 4}">${e.label}</text>`);
+    }
+    if (e.relay) {
+      const my = (e.y1 + e.y2) / 2;
+      const isTrip = e.relay === tripped || (lastFault?.spurious || []).includes(e.relay);
+      const stroke = isTrip ? (lastFault.correct ? "#3fb950" : "#f85149") : "#8b949e";
+      parts.push(`<rect x="${e.x1 - 26}" y="${my - 9}" width="18" height="18" rx="3"
+        fill="${isTrip ? stroke : "#161b22"}" stroke="${stroke}" stroke-width="2"/>`);
+      const lx = e.x1 + (e.trafo ? 24 : 6);   // clear the transformer symbol
+      parts.push(`<text class="lbl" x="${lx}" y="${my - 2}">${e.relay}</text>`);
+      parts.push(`<text class="lbl" x="${lx}" y="${my + 10}">${op[e.relay] !== undefined && op[e.relay] !== null ? (op[e.relay] * 1000).toFixed(0) + " ms" : ""}</text>`);
+    }
+  }
+
+  for (const n of g.nodes) {
+    const off = dead.has(n.id);
+    parts.push(`<line x1="${n.x - 24}" y1="${n.y}" x2="${n.x + 24}" y2="${n.y}" stroke="${off ? "#484f58" : "#58a6ff"}" stroke-width="3"/>`);
+    parts.push(`<text class="lbl" x="${n.x - 24}" y="${n.y - 6}">${n.id}</text>`);
+  }
+
+  // sensor dots, coloured by how far each phase sits above its neighbours
+  const groups = { "MV busbar": [250, Y.mv], "LV switchboard": [122, Y.lv] };
+  for (const [loc, [x0, y0]] of Object.entries(groups)) {
+    ["L1", "L2", "L3"].forEach((ph, i) => {
+      const key = loc + "/" + ph;
+      const h = history[key] || [];
+      const t = h.length ? h[h.length - 1] : null;
+      const peers = ["L1", "L2", "L3"].filter(p => p !== ph)
+        .map(p => (history[loc + "/" + p] || []).slice(-1)[0]).filter(v => v != null);
+      const d = (t != null && peers.length) ? t - (peers.reduce((a, b) => a + b, 0) / peers.length) : 0;
+      const col = d >= 15 ? "#f85149" : d >= 4 ? "#d29922" : d >= 3 ? "#e3a008" : "#3fb950";
+      parts.push(`<circle cx="${x0 + i * 26}" cy="${y0 - 14}" r="5" fill="${col}"/>`);
+      parts.push(`<text class="lbl" x="${x0 + i * 26 - 7}" y="${y0 - 24}">${ph}</text>`);
+      if (t != null) parts.push(`<text class="lbl" x="${x0 + i * 26 - 10}" y="${y0 - 32}">${t.toFixed(0)}°</text>`);
+    });
+  }
+  svg.innerHTML = parts.join("");
+}
+
+function nodeBelow(e) {
+  if (e.y2 === Y.near) return e.relay.split(" ")[0] + " near";
+  if (e.y2 === Y.far) return e.relay.split(" ")[0] + " far";
+  if (e.y2 === Y.lv) return "LV switchboard";
+  return "";
+}
+
+/* ---------- log-log time-current curves ---------- */
+function drawTCC() {
+  if (!TCC) return;
+  const W = 420, H = 300, L = 46, R = 12, T = 12, B = 34;
+  const pts = TCC.curves.flatMap(c => c.points);
+  if (!pts.length) return;
+  const xs = pts.map(p => p[0]), ys = pts.map(p => p[1]);
+  const x0 = Math.log10(Math.min(...xs)), x1 = Math.log10(Math.max(...xs));
+  const y0 = Math.log10(Math.min(...ys)), y1 = Math.log10(Math.max(...ys));
+  const px = v => L + (Math.log10(v) - x0) / (x1 - x0) * (W - L - R);
+  const py = v => H - B - (Math.log10(v) - y0) / (y1 - y0) * (H - T - B);
+  const colors = ["#58a6ff", "#3fb950", "#d29922", "#f85149", "#bc8cff", "#39c5cf", "#ff9bce"];
+  const out = [];
+
+  for (let d = Math.ceil(x0); d <= x1; d++) {
+    const v = 10 ** d;
+    out.push(`<line x1="${px(v)}" y1="${T}" x2="${px(v)}" y2="${H - B}" stroke="#21262d"/>`);
+    out.push(`<text class="lbl" x="${px(v)}" y="${H - B + 14}" text-anchor="middle">${v >= 1 ? v + " kA" : v * 1000 + " A"}</text>`);
+  }
+  for (let d = Math.ceil(y0); d <= y1; d++) {
+    const v = 10 ** d;
+    out.push(`<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="#21262d"/>`);
+    out.push(`<text class="lbl" x="${L - 6}" y="${py(v) + 3}" text-anchor="end">${v} s</text>`);
+  }
+  TCC.curves.forEach((c, i) => {
+    const d = c.points.map((p, k) => `${k ? "L" : "M"}${px(p[0]).toFixed(1)},${py(p[1]).toFixed(1)}`).join("");
+    out.push(`<path d="${d}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="1.8"/>`);
+    out.push(`<text class="lbl" x="${W - R - 4}" y="${14 + i * 12}" text-anchor="end" fill="${colors[i % colors.length]}">${c.relay}</text>`);
+  });
+  out.push(`<text class="lbl" x="${(W + L) / 2}" y="${H - 4}" text-anchor="middle">current (kA)</text>`);
+  $("#tcc").innerHTML = out.join("");
+}
+
+/* ---------- thermal trends ---------- */
+function drawThermal() {
+  const W = 420, H = 300, L = 40, R = 90, T = 12, B = 28;
+  const keys = Object.keys(history).filter(k => history[k].length > 1);
+  if (!keys.length) return;
+  const all = keys.flatMap(k => history[k]);
+  const lo = Math.min(...all) - 2, hi = Math.max(...all) + 2;
+  const py = v => H - B - (v - lo) / (hi - lo || 1) * (H - T - B);
+  const px = (i, n) => L + i / Math.max(n - 1, 1) * (W - L - R);
+  const colors = ["#58a6ff", "#f85149", "#3fb950", "#8b949e", "#bc8cff", "#39c5cf"];
+  const out = [];
+  for (let k = 0; k <= 4; k++) {
+    const v = lo + (hi - lo) * k / 4;
+    out.push(`<line x1="${L}" y1="${py(v)}" x2="${W - R}" y2="${py(v)}" stroke="#21262d"/>`);
+    out.push(`<text class="lbl" x="${L - 6}" y="${py(v) + 3}" text-anchor="end">${v.toFixed(0)}°C</text>`);
+  }
+  keys.forEach((k, i) => {
+    const h = history[k];
+    const d = h.map((v, j) => `${j ? "L" : "M"}${px(j, h.length).toFixed(1)},${py(v).toFixed(1)}`).join("");
+    out.push(`<path d="${d}" fill="none" stroke="${colors[i % colors.length]}" stroke-width="1.6"/>`);
+    out.push(`<text class="lbl" x="${W - R + 6}" y="${16 + i * 13}" fill="${colors[i % colors.length]}">${k}</text>`);
+  });
+  $("#therm").innerHTML = out.join("");
+}
+
+/* ---------- side panels ---------- */
+function drawHazards() {
+  $("#hazards").innerHTML = (S?.hazards || []).map(h => `
+    <div class="hz">
+      <div class="top">
+        <span class="lbl-b" style="font-size:13px">${h.where}</span>
+        <span class="pill ${catClass(h.category)}">${h.ppe}</span>
+      </div>
+      <div class="big">${fx(h.energy_cal)} <span class="meta">cal/cm²</span></div>
+      <div class="meta">
+        ${h.kv} kV · ${fx(h.bolted_ka)} kA bolted<br>
+        cleared by ${h.relay} in ${h.clearing_s === null ? "never" : (h.clearing_s * 1000).toFixed(0) + " ms"}<br>
+        boundary ${fx(h.boundary_mm / 1000)} m · ${h.method}
+      </div>
+    </div>`).join("");
+}
+
+function drawCoord() {
+  if (!S) return;
+  const v = S.violations || [];
+  const head = v.length
+    ? `<p class="bad"><b>${v.length}</b> coordination violation${v.length > 1 ? "s" : ""} — a backup can beat its primary.</p>`
+    : `<p class="good">All primary/backup pairs graded, at maximum and minimum infeed.</p>`;
+  const rows = v.slice(0, 6).map(x =>
+    `<tr><td>${x.primary} → ${x.backup}</td><td>${x.fault}</td><td class="bad">${fx(x.margin_s, 3)} s</td></tr>`).join("");
+  $("#coord").innerHTML = head +
+    `<p class="meta dim">Mode <b>${S.mode}</b> · total clearing ${fx(S.total_clearing_s, 3)} s</p>` +
+    (rows ? `<table><thead><tr><th>Pair</th><th>Fault</th><th>Margin</th></tr></thead><tbody>${rows}</tbody></table>` : "");
+}
+
+function drawRelays() {
+  $("#relays tbody").innerHTML = (S?.relays || []).map(r => `
+    <tr>
+      <td>${r.relay}</td>
+      <td class="num">${fx(r.pickup_a, 0)} A</td>
+      <td class="num">${fx(r.tms, 3)}</td>
+      <td>${r.curve}</td>
+      <td class="num">${fx(r.fault_ka)} kA</td>
+      <td class="num">${r.op_time_s === null ? "never" : (r.op_time_s * 1000).toFixed(0) + " ms"}</td>
+    </tr>`).join("");
+}
+
+function drawAlerts() {
+  const el = $("#alerts");
+  if (!seenAlerts.length) { el.innerHTML = '<p class="empty">No alerts.</p>'; return; }
+  el.innerHTML = seenAlerts.slice(0, 30).map(a => `
+    <div class="alert l${a.level}">
+      <div class="h"><b>${a.sensor}</b><span class="num">${a.delta_k >= 0 ? "+" : ""}${fx(a.delta_k, 1)} K</span></div>
+      <div class="s">${a.label}</div>
+      <div class="s">${fx(a.temp_c, 1)} °C · rising ${fx(a.rate_k_per_h, 1)} K/h${a.risk != null ? " · risk " + fx(a.risk) : ""}</div>
+    </div>`).join("");
+}
+
+function drawCompare() {
+  const modes = Object.keys(modeStats);
+  if (modes.length < 2) return;
+  $("#compare").innerHTML = `<table><thead><tr>
+      <th>Mode</th><th>Viol.</th><th>Clearing</th><th>LV cal/cm²</th></tr></thead><tbody>` +
+    modes.map(m => {
+      const s = modeStats[m];
+      return `<tr><td>${m}</td>
+        <td class="num ${s.viol ? "bad" : "good"}">${s.viol}</td>
+        <td class="num">${fx(s.total, 3)} s</td>
+        <td class="num">${fx(s.lv)}</td></tr>`;
+    }).join("") + "</tbody></table>";
+}
+
+function banner(html, ok) {
+  const b = $("#banner");
+  b.className = "show " + (ok ? "ok" : "bad");
+  b.innerHTML = html;
+}
+
+/* ---------- state plumbing ---------- */
+async function refresh() {
+  S = await fetch("/api/state").then(r => r.json());
+  TCC = await fetch("/api/tcc").then(r => r.json());
+  const lv = S.hazards.find(h => h.where === "LV switchboard");
+  modeStats[S.mode] = { viol: S.violations.length, total: S.total_clearing_s, lv: lv?.energy_cal };
+  document.querySelectorAll("[data-mode]").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.mode === S.mode)));
+  if (!$("#faultbus").options.length) {
+    $("#faultbus").innerHTML = S.buses.filter(b => b !== "HV infeed")
+      .map(b => `<option ${b === "F1 far" ? "selected" : ""}>${b}</option>`).join("");
+  }
+  drawHazards(); drawCoord(); drawRelays(); drawTCC(); drawSLD(); drawCompare();
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onmessage = ev => {
+    const m = JSON.parse(ev.data);
+    if (m.snapshot) return;
+    $("#clock").textContent = String(Math.floor(m.hours)).padStart(2, "0") + ":" +
+      String(Math.floor((m.hours % 1) * 60)).padStart(2, "0");
+    $("#load").textContent = (m.load * 100).toFixed(0) + "%";
+    $("#amb").textContent = fx(m.ambient_c, 1) + " °C";
+    for (const [k, v] of Object.entries(m.temps)) {
+      (history[k] ||= []).push(v);
+      if (history[k].length > HISTORY) history[k].shift();
+    }
+    for (const a of m.alerts || []) {
+      const prev = seenAlerts[0];
+      if (!prev || prev.sensor !== a.sensor || prev.level !== a.level) seenAlerts.unshift(a);
+    }
+    drawThermal(); drawSLD(); drawAlerts();
+  };
+  ws.onclose = () => setTimeout(connect, 1500);
+  ws.onopen = () => setInterval(() => ws.readyState === 1 && ws.send("ping"), 5000);
+}
+
+/* ---------- actions ---------- */
+document.querySelectorAll("[data-mode]").forEach(btn => btn.onclick = async () => {
+  const mode = btn.dataset.mode;
+  const all = [...document.querySelectorAll("[data-mode]")];
+  all.forEach(b => b.disabled = true);
+  if (mode === "optimised") banner("Searching pickup, time multiplier and curve shape for all seven relays…", true);
+  const res = await api("/api/mode/" + mode);
+  await refresh();
+  if (res.changed) {
+    banner(res.changed.map(c =>
+      `<b>${c.where}</b>: ${(c.clearing_s[0] * 1000).toFixed(0)} → ${(c.clearing_s[1] * 1000).toFixed(0)} ms,
+       ${fx(c.energy_cal[0])} → ${fx(c.energy_cal[1])} cal/cm², PPE category ${c.category[0]} → ${c.category[1]}`
+    ).join("<br>"), true);
+  } else {
+    banner(`Settings switched to <b>${mode}</b>. ${S.violations.length
+      ? `<span class="bad">${S.violations.length} coordination violations</span> — this is what copy-paste settings actually do.`
+      : "All pairs graded correctly."}`, S.violations.length === 0);
+  }
+  all.forEach(b => b.disabled = false);
+});
+
+$("#hotspot").onclick = async () => {
+  const r = await api("/api/inject/hotspot?sensor=LV%20switchboard%2FL2&multiplier=3&hours=3");
+  banner(`Joint <b>${r.injected}</b> now degrading toward ${r.multiplier}× resistance. Watch L2 separate from its neighbours.`, true);
+};
+
+$("#fault").onclick = async () => {
+  const bus = $("#faultbus").value;
+  lastFault = await api("/api/inject/fault?bus=" + encodeURIComponent(bus));
+  const f = lastFault;
+  const order = f.operates.map(o => `${o.relay} ${(o.op_time_s * 1000).toFixed(0)} ms`).join(" → ");
+  let msg = `Fault at <b>${f.bus}</b> (${fx(f.ikss_ka)} kA). `;
+  if (f.correct) {
+    msg += `<span class="good">${f.first} cleared it in ${(f.clearing_s * 1000).toFixed(0)} ms.</span>
+            Correct relay, nothing else moved. Lost: ${f.de_energised.join(", ") || "nothing"}.`;
+  } else if (f.spurious.length) {
+    msg += `<span class="bad">${f.first} cleared it, but ${f.spurious.join(" and ")}
+            tripped too</span> — only ${fx(f.margin_s, 3)} s behind, and a breaker needs
+            ${fx(f.needed_margin_s, 2)} s to open. Lost: <b>${f.de_energised.join(", ")}</b>.`;
+  } else {
+    msg += `<span class="bad">${f.first} tripped first, but ${f.should_clear} should have.</span>
+            Lost: <b>${f.de_energised.join(", ")}</b>.`;
+  }
+  banner(msg + `<br><span class="dim">${order}</span>`, f.correct);
+  drawSLD();
+};
+
+$("#reset").onclick = async () => {
+  await api("/api/reset");
+  lastFault = null; seenAlerts.length = 0;
+  Object.keys(history).forEach(k => delete history[k]);
+  Object.keys(modeStats).forEach(k => delete modeStats[k]);
+  $("#banner").className = "";
+  await refresh();
+};
+
+refresh().then(connect);
+</script>
+</body>
+</html>

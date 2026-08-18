@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 import arcflash
 import coord
@@ -223,6 +224,80 @@ async def optimize():
         state.optimising = False
 
 
+@app.post("/api/mode/{mode}")
+async def set_mode(mode: str):
+    """Switch settings. copy-paste and hand-graded are instant; optimised runs the search.
+
+    Being able to put the broken baseline back on screen matters: the demo is only honest
+    if the audience sees what today's practice actually produces.
+    """
+    if mode == "copy-paste":
+        state.settings = coord.baseline(state.loads)
+    elif mode == "hand-graded":
+        state.settings = coord.sequential(state.net, state.loads, state.tables)
+    elif mode == "optimised":
+        return await optimize()
+    else:
+        return {"error": f"unknown mode {mode}",
+                "known": ["copy-paste", "hand-graded", "optimised"]}
+    state.mode = mode
+    return state.snapshot()
+
+
+@app.post("/api/inject/fault")
+def inject_fault(bus: str = "F1 far"):
+    """Fault a bus and report which breaker actually opens first.
+
+    The relay that SHOULD clear it is the one whose own zone contains the fault. If a
+    backup beats it, the fault is cleared by tripping a bigger slice of the network than
+    necessary - that is miscoordination, and it is what turns one fault into an outage.
+    """
+    if bus not in state.levels:
+        return {"error": f"unknown bus {bus}", "known": list(state.levels)}
+
+    idx = grid.bus_by_name(state.net, bus)
+    ikss = state.levels[bus]
+    seen = grid.currents_for_fault(state.net, idx, ikss)
+    should = grid.protecting_relay(state.net, idx)
+
+    ops = []
+    for name, cur in seen.items():
+        t = coord._t(state.settings[name], cur)
+        if math.isfinite(t):
+            ops.append({"relay": name, "current_ka": cur, "op_time_s": t,
+                        "role": "primary" if name == should else "backup"})
+    ops.sort(key=lambda o: o["op_time_s"])
+
+    if not ops:
+        return clean({"bus": bus, "ikss_ka": ikss, "should_clear": should,
+                      "operates": [], "first": None, "correct": False,
+                      "spurious": [], "de_energised": []})
+
+    first = ops[0]
+    # Any backup that times out before the leading breaker has finished opening has
+    # already tripped too, so its section is lost as well.
+    deadline = first["op_time_s"] + coord.BREAKER_S + coord.OVERTRAVEL_S
+    spurious = [o["relay"] for o in ops[1:] if o["op_time_s"] < deadline]
+
+    lost = set()
+    for name in [first["relay"]] + spurious:
+        lost.update(grid.downstream_buses(state.net, name))
+
+    return clean({
+        "bus": bus,
+        "ikss_ka": ikss,
+        "should_clear": should,
+        "operates": ops,
+        "first": first["relay"],
+        "correct": first["relay"] == should and not spurious,
+        "spurious": spurious,
+        "clearing_s": first["op_time_s"],
+        "margin_s": (ops[1]["op_time_s"] - ops[0]["op_time_s"]) if len(ops) > 1 else None,
+        "needed_margin_s": coord.BREAKER_S + coord.OVERTRAVEL_S,
+        "de_energised": sorted(lost),
+    })
+
+
 @app.post("/api/reset")
 def reset():
     global state
@@ -242,3 +317,8 @@ async def ws(websocket: WebSocket):
         pass
     finally:
         state.clients.discard(websocket)
+
+
+# Mounted last so it cannot shadow /api or /ws. Serving the dashboard from the same
+# process means no second server, no CORS, and nothing to start on demo day but this.
+app.mount("/", StaticFiles(directory="static", html=True), name="static")
