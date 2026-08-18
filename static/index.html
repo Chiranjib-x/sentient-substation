@@ -106,6 +106,11 @@
         <select id="faultbus"></select>
         <button id="fault">Inject fault</button>
         <span class="sep"></span>
+        <span class="dim">Arc protection:</span>
+        <button data-arc="none">None</button>
+        <button data-arc="detection">Detection</button>
+        <button data-arc="elimination">Elimination</button>
+        <span class="sep"></span>
         <button id="reset">Reset</button>
       </div>
       <div id="banner"></div>
@@ -332,7 +337,7 @@ function drawHazards() {
       <div class="big">${fx(h.energy_cal)} <span class="meta">cal/cm²</span></div>
       <div class="meta">
         ${h.kv} kV · ${fx(h.bolted_ka)} kA bolted<br>
-        cleared by ${h.relay} in ${h.clearing_s === null ? "never" : (h.clearing_s * 1000).toFixed(0) + " ms"}<br>
+        cleared by ${h.cleared_by || h.relay} in ${h.clearing_s === null ? "never" : (h.clearing_s * 1000).toFixed(0) + " ms"}<br>
         boundary ${fx(h.boundary_mm / 1000)} m · ${h.method}
       </div>
     </div>`).join("");
@@ -402,6 +407,8 @@ async function refresh() {
   modeStats[S.mode] = { viol: S.violations.length, total: S.total_clearing_s, lv: lv?.energy_cal };
   document.querySelectorAll("[data-mode]").forEach(b =>
     b.setAttribute("aria-pressed", String(b.dataset.mode === S.mode)));
+  document.querySelectorAll("[data-arc]").forEach(b =>
+    b.setAttribute("aria-pressed", String(b.dataset.arc === S.arc_protection)));
   if (!$("#faultbus").options.length) {
     $("#faultbus").innerHTML = S.buses.filter(b => b !== "HV infeed")
       .map(b => `<option ${b === "F1 far" ? "selected" : ""}>${b}</option>`).join("");
@@ -451,6 +458,20 @@ document.querySelectorAll("[data-mode]").forEach(btn => btn.onclick = async () =
       : "All pairs graded correctly."}`, S.violations.length === 0);
   }
   all.forEach(b => b.disabled = false);
+});
+
+document.querySelectorAll("[data-arc]").forEach(btn => btn.onclick = async () => {
+  const before = S.hazards.find(h => h.where === "MV busbar");
+  await api("/api/arc-protection/" + btn.dataset.arc);
+  await refresh();
+  const after = S.hazards.find(h => h.where === "MV busbar");
+  banner(
+    `Arc protection <b>${btn.dataset.arc}</b>. MV busbar
+     ${(before.clearing_s * 1000).toFixed(0)} → ${(after.clearing_s * 1000).toFixed(0)} ms,
+     ${fx(before.energy_cal)} → <b>${fx(after.energy_cal)}</b> cal/cm², ${after.ppe}.
+     <span class="dim">Coordination margins unchanged — an arc inside a cubicle is never a
+     downstream fault, so this device needs no selectivity.</span>`,
+    after.category < before.category || after.category <= 1);
 });
 
 $("#hotspot").onclick = async () => {

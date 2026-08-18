@@ -38,6 +38,23 @@ ENCLOSURES = {
     "open air": {"gap": 153.0, "x": 2.000, "distance": 910.0, "box": False},
 }
 
+# Arc-flash protection, as total clearing time in seconds.
+#
+# Overcurrent relays are graded for selectivity, so upstream relays are deliberately slow -
+# precisely where fault energy is highest. That is why coordination tuning alone cannot make
+# an MV busbar safe: the incomer MUST wait for the feeder relays, and the waiting is what
+# burns the technician.
+#
+# A light-sensing arc-flash relay escapes the trade-off entirely. An arc inside a switchgear
+# cubicle is never a downstream fault, so the relay needs no selectivity and can trip at once
+# without breaking any coordination. An arc eliminator goes further, crowbarring the arc into
+# a bolted short so the energy stops before the breaker has even moved.
+ARC_PROTECTION = {
+    "none": None,
+    "detection": 0.0025 + 0.06,   # light + current relay, then the breaker opens
+    "elimination": 0.004,         # crowbar collapses the arc; no waiting for a breaker
+}
+
 IEEE1584_MAX_KV = 15.0   # upper limit of the empirical model's test data
 BOUNDARY_CAL = 1.2       # onset of second-degree burn on bare skin, cal/cm2
 
@@ -153,15 +170,25 @@ def duties(net, levels=None, weight=3.0):
             for hp in hazard_points(net)]
 
 
-def assess(net, settings, levels=None):
-    """Incident energy and PPE category at each hazard point, for one set of settings."""
+def assess(net, settings, levels=None, arc_protection="none"):
+    """Incident energy and PPE category at each hazard point, for one set of settings.
+
+    `arc_protection` adds a dedicated arc-flash device alongside the overcurrent relay.
+    Whichever acts first sets the arcing time, and the overcurrent grading is untouched -
+    which is the whole point: this buys safety without costing selectivity.
+    """
     levels = levels if levels is not None else grid.bus_fault_levels(net)
+    fast = ARC_PROTECTION.get(arc_protection)
     out = []
     for hp in hazard_points(net):
         ibf = levels[hp["bus"]]
         t = coord._t(settings[hp["relay"]], ibf * hp["ratio"])
+        cleared_by = hp["relay"]
+        if fast is not None and fast < t:
+            t, cleared_by = fast, "arc-flash " + arc_protection
         res = incident_energy(hp["kv"], ibf, t, hp["enclosure"])
         res["category"], res["ppe"] = ppe_category(res["energy_cal"])
+        res["cleared_by"] = cleared_by
         out.append({**hp, "bolted_ka": ibf, **res})
     return out
 
@@ -211,4 +238,19 @@ if __name__ == "__main__":
     assert doubled["energy_cal"] > 1.9 * lv["energy_cal"], \
         "energy must scale with arcing time - that proportionality IS the product thesis"
 
-    print("\nOK - incident energy tracks relay clearing time at both hazard points.")
+    print()
+    print("=== Adding a dedicated arc-flash device (coordination unchanged) ===")
+    for opt in ("none", "detection", "elimination"):
+        rows = assess(net, tuned, levels, arc_protection=opt)
+        print(f"  {opt:<12} " + " | ".join(
+            f"{r['where']}: {r['clearing_s'] * 1000:5.1f} ms, {r['energy_cal']:6.2f} cal/cm2,"
+            f" cat {r['category']}" for r in rows))
+
+    mv_none = assess(net, tuned, levels, "none")[0]
+    mv_det = assess(net, tuned, levels, "detection")[0]
+    assert mv_det["energy_cal"] < mv_none["energy_cal"] / 5, (
+        "arc detection must transform MV energy, not nudge it - else it is not worth the hardware")
+    assert mv_none["category"] >= 4 and mv_det["category"] <= 2, (
+        "the MV busbar should move from prohibited to workable")
+
+    print("OK - incident energy tracks relay clearing time at both hazard points.")

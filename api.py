@@ -58,6 +58,7 @@ class State:
         # instant. The optimiser is a deliberate user action, because it takes ~15 s.
         self.settings = coord.sequential(self.net, self.loads, self.tables)
         self.mode = "hand-graded"
+        self.arc_protection = "none"
         self.optimising = False
 
         self.detector = sensors.Detector()
@@ -69,7 +70,7 @@ class State:
 
     @property
     def hazards(self):
-        return arcflash.assess(self.net, self.settings, self.levels)
+        return arcflash.assess(self.net, self.settings, self.levels, self.arc_protection)
 
     def relay_rows(self):
         t_max = self.tables["max"][1]
@@ -90,6 +91,7 @@ class State:
         v = coord.violations(self.settings, self.tables)
         return clean({
             "mode": self.mode,
+            "arc_protection": self.arc_protection,
             "optimising": self.optimising,
             "hours": self.t_h,
             "relays": self.relay_rows(),
@@ -102,7 +104,7 @@ class State:
             "hazards": [
                 {k: h[k] for k in ("where", "kv", "bolted_ka", "relay", "method",
                                    "clearing_s", "energy_cal", "boundary_mm",
-                                   "category", "ppe")}
+                                   "category", "ppe", "cleared_by")}
                 for h in self.hazards
             ],
             "buses": list(self.net.bus.name),
@@ -296,6 +298,22 @@ def inject_fault(bus: str = "F1 far"):
         "needed_margin_s": coord.BREAKER_S + coord.OVERTRAVEL_S,
         "de_energised": sorted(lost),
     })
+
+
+@app.post("/api/arc-protection/{mode}")
+def set_arc_protection(mode: str):
+    """Add or remove a dedicated arc-flash device.
+
+    Deliberately independent of the relay settings: an arc inside a cubicle is never a
+    downstream fault, so this device needs no selectivity and changes no coordination
+    margin. It is the only thing that makes an MV busbar workable, because grading forces
+    the incomer to be slow exactly where the energy is worst.
+    """
+    if mode not in arcflash.ARC_PROTECTION:
+        return {"error": f"unknown option {mode}",
+                "known": list(arcflash.ARC_PROTECTION)}
+    state.arc_protection = mode
+    return state.snapshot()
 
 
 @app.post("/api/reset")
