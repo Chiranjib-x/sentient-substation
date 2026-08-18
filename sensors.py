@@ -63,6 +63,36 @@ def ambient_c(hours):
     return AMBIENT_MEAN_C - AMBIENT_SWING_C * math.cos((hours - 15.0) / 24.0 * 2 * math.pi)
 
 
+SENSOR_IDS = [(loc, ph) for loc, phases in GROUPS.items() for ph in phases]
+
+
+def sid_str(sid):
+    """Sensor id as a flat string, for JSON keys and the dashboard."""
+    return f"{sid[0]}/{sid[1]}"
+
+
+def degradation_factor(sid, t_h, degrade):
+    """Resistance multiplier for one joint at one instant."""
+    if not degrade or sid != degrade[0]:
+        return 1.0
+    _, t0, t1, final = degrade
+    if t_h < t0:
+        return 1.0
+    return 1.0 + (final - 1.0) * min(1.0, (t_h - t0) / max(t1 - t0, 1e-9))
+
+
+def frame_at(t_h, degrade=None, rng=None):
+    """Telemetry at one instant. A pure function of time, so the API can drive its own
+    clock without reimplementing the physics."""
+    rng = rng or random.Random(0)
+    load, amb = load_factor(t_h), ambient_c(t_h)
+    temps = {}
+    for sid in SENSOR_IDS:
+        rise = RISE_FULL_LOAD_K * (load ** 2) * degradation_factor(sid, t_h, degrade)
+        temps[sid] = amb + rise + rng.gauss(0.0, NOISE_K)
+    return {"hours": t_h, "load": load, "ambient_c": amb, "temps": temps}
+
+
 def simulate(hours=24.0, step_min=1.0, degrade=None, seed=0):
     """Yield one telemetry frame per time step.
 
@@ -71,26 +101,8 @@ def simulate(hours=24.0, step_min=1.0, degrade=None, seed=0):
     multiplier scales the temperature rise directly.
     """
     rng = random.Random(seed)
-    ids = [(loc, ph) for loc, phases in GROUPS.items() for ph in phases]
-    steps = int(hours * 60 / step_min)
-
-    for k in range(steps):
-        t_h = k * step_min / 60.0
-        load = load_factor(t_h)
-        amb = ambient_c(t_h)
-        frame = {"hours": t_h, "load": load, "ambient_c": amb, "temps": {}}
-
-        for sid in ids:
-            mult = 1.0
-            if degrade and sid == degrade[0]:
-                _, t0, t1, final = degrade
-                if t_h >= t0:
-                    frac = min(1.0, (t_h - t0) / max(t1 - t0, 1e-9))
-                    mult = 1.0 + (final - 1.0) * frac
-            rise = RISE_FULL_LOAD_K * (load ** 2) * mult
-            frame["temps"][sid] = amb + rise + rng.gauss(0.0, NOISE_K)
-
-        yield frame
+    for k in range(int(hours * 60 / step_min)):
+        yield frame_at(k * step_min / 60.0, degrade, rng)
 
 
 def severity(delta_k):

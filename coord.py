@@ -101,6 +101,19 @@ def primary_time(settings, net, table):
     return total
 
 
+def curve_points(setting, i_from_ka, i_to_ka, n=60):
+    """Sampled (current, time) pairs for a log-log time-current curve plot."""
+    lo = math.log10(max(i_from_ka, setting[0] * 1.001))
+    hi = math.log10(i_to_ka)
+    pts = []
+    for k in range(n):
+        i = 10 ** (lo + (hi - lo) * k / (n - 1))
+        t = _t(setting, i)
+        if math.isfinite(t):
+            pts.append((i, t))
+    return pts
+
+
 def _pickup_ceiling(name, load_ka, t_min):
     """Highest pickup that still detects the weakest fault this relay answers for."""
     weakest = min((seen[name] for seen in t_min.values() if seen[name] > 0), default=math.inf)
