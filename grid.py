@@ -3,9 +3,12 @@
 Radial MV substation — 110/20 kV infeed, three feeders, two protected sections each.
 That gives seven relays and six primary/backup pairs for coord.py to optimise.
 
-    HV ──[T1]── MV busbar ─┬─[F1 head]─ F1 near ─[F1 lateral]─ F1 far
+    HV ──[T1]── MV busbar ─┬─[F1 head]─ F1 near ─[F1 lateral]─ F1 far ──[TD1]── LV board
                            ├─[F2 head]─ F2 near ─[F2 lateral]─ F2 far
                            └─[F3 head]─ F3 near ─[F3 lateral]─ F3 far
+
+TD1 steps 20 kV down to a 400 V switchboard with no LV relay of its own, so the MV relay
+upstream sets that board's arc-flash exposure. That is where arcflash.py does its work.
 
 Run directly to verify the environment:  .venv\\Scripts\\python grid.py
 """
@@ -49,7 +52,27 @@ def build():
         pp.create_load(net, near, p_mw=1.2, q_mvar=0.4, name=f"F{f} near load")
         pp.create_load(net, far, p_mw=0.8, q_mvar=0.3, name=f"F{f} far load")
 
+    # Low-voltage switchboard on the first feeder. Arc flash is overwhelmingly an LV
+    # problem in practice: MV switchgear is racked out and operated remotely, while
+    # technicians open LV boards with the power on. Schneider's ArcBlok - the product our
+    # thermal sensing is modelled on - is an LV switchboard component, so the safety half
+    # of this platform has nowhere to live without an LV board.
+    #
+    # Deliberately no LV main relay: this transformer is protected from the MV side, which
+    # is normal for a small distribution unit and makes the coupling explicit - the MV
+    # relay's time multiplier directly sets the incident energy at the LV board.
+    lv = pp.create_bus(net, vn_kv=0.4, name="LV switchboard")
+    pp.create_transformer(net, bus_by_name(net, "F1 far"), lv,
+                          std_type="0.63 MVA 20/0.4 kV", name="TD1")
+    pp.create_load(net, lv, p_mw=0.35, q_mvar=0.12, name="LV load")
+
     return net
+
+
+def bus_fault_levels(net, case="max"):
+    """IEC 60909 bolted fault level at every bus, kA. Arc-flash energy scales with this."""
+    sc.calc_sc(net, fault="3ph", case=case)
+    return {net.bus.at[i, "name"]: float(v) for i, v in net.res_bus_sc.ikss_ka.items()}
 
 
 def bus_by_name(net, name):

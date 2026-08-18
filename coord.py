@@ -161,8 +161,14 @@ def sequential(net, loads, tables, cti=CTI):
     return settings
 
 
-def optimize(net, cti=CTI, seed=0):
+def optimize(net, cti=CTI, seed=0, extra_duties=()):
     """Search pickup, TMS and curve shape per relay: least clearing time, every CTI held.
+
+    `extra_duties` is a list of (relay, current_ka, weight): operating points that must
+    also be fast, beyond the zone-end faults. Supply the places where people physically
+    stand. Without them the objective only sees each relay's highest-current case and will
+    happily choose a curve that is quick there and slow everywhere else - see
+    arcflash.duties() for why that is not hypothetical.
 
     ponytail: penalty method inside differential_evolution, ~15 lines, converges on a
     7-relay radial feeder. Curve choice is an integer variable, which is why this beats
@@ -206,6 +212,10 @@ def optimize(net, cti=CTI, seed=0):
                     for r in grid.relays(net)])
     curve_par = np.array([CURVES[c] for c in TUNABLE])  # rows of (K, alpha, B)
 
+    d_idx = np.array([at[n] for n, _, _ in extra_duties], dtype=int)
+    d_cur = np.array([c for _, c, _ in extra_duties], dtype=float)
+    d_w = np.array([w for *_, w in extra_duties], dtype=float)
+
     def times(current, pickup, tms, K, alpha, B):
         with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
             m = current / pickup
@@ -227,7 +237,13 @@ def optimize(net, cti=CTI, seed=0):
         penalty = np.where(np.isfinite(penalty), penalty, 0.0).sum()
 
         t_own = times(own, pu, tms, K, alpha, B)
-        return np.where(np.isfinite(t_own), t_own, 100.0).sum() + 100.0 * penalty
+        obj = np.where(np.isfinite(t_own), t_own, 100.0).sum()
+
+        if d_idx.size:
+            td = times(d_cur, pu[d_idx], tms[d_idx], K[d_idx], alpha[d_idx], B[d_idx])
+            obj += (d_w * np.where(np.isfinite(td), td, 100.0)).sum()
+
+        return obj + 100.0 * penalty
 
     res = differential_evolution(cost, bounds, integrality=np.array(integrality),
                                  seed=seed, tol=1e-6, maxiter=400, popsize=20,
