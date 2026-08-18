@@ -27,7 +27,7 @@ years ago and has been wrong ever since.
 | `sensors.py` | Vishal | Thermal telemetry simulator, differential NETA detection |
 | `api.py` | Vishal | FastAPI, WebSocket push, live clock - the only integration point |
 | _checks_ | all | each module self-checks in `__main__`; the assertions are the evidence |
-| `ui/` | — | React dashboard (Sprint 3, Sep 8) |
+| `static/index.html` | Rudresh | Operator dashboard: single-line diagram, TCC curves, thermal trends |
 
 **Rule:** the owner of a file is the only one who edits it. Integration happens in `api.py` and
 nowhere else.

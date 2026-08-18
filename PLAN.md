@@ -81,7 +81,7 @@ sentient-substation/
 |---|---|---|
 | **Bibek (EEE)** | `grid.py`, `coord.py`, `arcflash.py` — all the physics, all the standards | Business case numbers |
 | **Vishal (CSE)** | `api.py`, `sensors.py`, anomaly detection, SQLite | Optimizer tuning |
-| **4th member** | `ui/` — dashboard, SVG single-line, TCC plots, alert feed | Demo operation |
+| **Rudresh** | `static/index.html` — dashboard, SVG single-line, TCC plots, alert feed | Demo operation |
 | **Chiranjib (lead)** | Integration, mentor comms, pitch deck, business case, demo script | Everything (you're the glue) |
 
 **Rule:** the person who owns a file is the only one who edits it. Integration happens in `api.py`
